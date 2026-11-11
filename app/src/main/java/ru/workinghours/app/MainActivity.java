@@ -1,6 +1,9 @@
 package ru.workinghours.app;
 
 import android.app.Activity;
+import android.appwidget.AppWidgetManager;
+import android.content.ComponentName;
+import android.os.Build;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -25,6 +28,8 @@ public class MainActivity extends Activity {
     private static final int PICK_FILE = 1001;
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
+    private boolean pageReady = false;
+    private String pendingOpen = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,7 +51,13 @@ public class MainActivity extends Activity {
         s.setAllowFileAccess(true);
 
         web.addJavascriptInterface(new Net(), "AndroidNet"); // вход по почте и облако
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageReady = true;
+                runPendingOpen();
+            }
+        });
         web.setWebChromeClient(new WebChromeClient() {
             // Кнопка «Добавить фото» открывает галерею
             @Override
@@ -69,6 +80,7 @@ public class MainActivity extends Activity {
         });
         setContentView(web);
 
+        takeOpenRequest(getIntent());
         if (savedInstanceState != null) {
             web.restoreState(savedInstanceState);
         } else {
@@ -96,6 +108,32 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
+    // Нажатие на день или месяц в виджете: wh://day/2026-11-12 или wh://month/2026-11
+    private void takeOpenRequest(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri u = intent.getData();
+        if (!"wh".equals(u.getScheme())) return;
+        String path = u.getPath();
+        if (path == null || path.length() < 2) return;
+        pendingOpen = path.substring(1);
+    }
+
+    private void runPendingOpen() {
+        if (!pageReady || pendingOpen == null) return;
+        final String k = pendingOpen;
+        pendingOpen = null;
+        web.postDelayed(() -> web.evaluateJavascript(
+                "window.__openDate && window.__openDate(" + JSONObject.quote(k) + ")", null), 250);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        takeOpenRequest(intent);
+        runPendingOpen();
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
@@ -112,6 +150,19 @@ public class MainActivity extends Activity {
 
     // Сетевые запросы к Firebase (вход и облачное сохранение) без ограничений CORS
     public class Net {
+        @JavascriptInterface
+        public void saveWidget(final String json) {
+            new Thread(() -> CalendarWidget.saveData(getApplicationContext(), json)).start();
+        }
+
+        @JavascriptInterface
+        public boolean pinWidget() {
+            if (Build.VERSION.SDK_INT < 26) return false;
+            AppWidgetManager m = getSystemService(AppWidgetManager.class);
+            if (m == null || !m.isRequestPinAppWidgetSupported()) return false;
+            return m.requestPinAppWidget(new ComponentName(MainActivity.this, CalendarWidget.class), null, null);
+        }
+
         @JavascriptInterface
         public void request(final String id, final String method, final String url,
                             final String headersJson, final String body) {

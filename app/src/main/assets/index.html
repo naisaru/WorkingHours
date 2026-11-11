@@ -13,7 +13,7 @@ img{max-width:100%}
 <script>window.__APK=true;</script>
 </head>
 <body>
-<title>Working hours 1/2</title>
+<title>WorkCalendar</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 
@@ -258,7 +258,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:24px;background:var(--whit
 <div class="app">
   <header class="head">
     <div id="calIcon" aria-hidden="true"></div>
-    <div class="banner"><div class="banner-in"><small id="bannerSub">WORKING HOURS · 1/2</small><h1 id="bannerTitle">ГРАФИК СМЕН</h1></div></div>
+    <div class="banner"><div class="banner-in"><small id="bannerSub">WORKCALENDAR · 1/2</small><h1 id="bannerTitle">ГРАФИК СМЕН</h1></div></div>
     <button class="iconbtn" id="openSet" aria-label="Настройки"></button>
   </header>
 
@@ -469,6 +469,11 @@ input[type=range]::-moz-range-thumb{width:20px;height:24px;background:var(--whit
           <button class="btn small" id="fbOutBtn">Выйти из аккаунта</button>
         </div>
       </div>
+      <div class="sec" id="wgSec" hidden>
+        <h3><span id="wgIco"></span>Виджет</h3>
+        <p class="acct">Календарь на главном экране: листай месяцы стрелками, нажми на день, и он откроется здесь.</p>
+        <button class="btn small" id="wgBtn" style="width:100%">Добавить виджет на экран</button>
+      </div>
       <button class="btn" id="openYear"><span id="yrBtnIco"></span>Статистика за год</button>
       <div class="sec">
         <h3>Сброс</h3>
@@ -655,7 +660,7 @@ function sfx(n){if(S.vol<=0)return;try{SFX[n]()}catch(e){}}
 let greeted=false;document.addEventListener('pointerdown',()=>{if(!greeted){greeted=true;ac()}},{once:true});
 
 /* ---------- render ---------- */
-function render(){paintLegend();$('#bannerTitle').textContent=U().banner;$('#pTitle').textContent=U().period;$('#bannerSub').textContent='WORKING HOURS · '+(S.pattern==='free'?'СВОБОДНЫЙ':S.pattern);
+function render(){paintLegend();exportWidget();$('#bannerTitle').textContent=U().banner;$('#pTitle').textContent=U().period;$('#bannerSub').textContent='WORKCALENDAR · '+(S.pattern==='free'?'СВОБОДНЫЙ':S.pattern);
   const {y,m}=view;$('#mName').textContent=MONTHS[m];$('#mYear').textContent=y;
   const off=(new Date(y,m,1).getDay()+6)%7,n=new Date(y,m+1,0).getDate();
   let h='';for(let i=0;i<off;i++)h+='<span class="blank"></span>';
@@ -978,6 +983,19 @@ async function fbInit(){paintFb();if(!fbSess())return;fbBusy=true;paintFb();
   try{const c=await fbPull();if(c&&(c.updated||0)>(S.updated||0))adopt(c);else if(!c||(S.updated||0)>(c.updated||0))await fbPush();else fbLast=c.updated||Date.now()}
   catch(e){fbErrMsg=fbMsg(e)}
   fbBusy=false;paintFb()}
+
+/* ---------- home screen widget (APK) ---------- */
+var wgT=null;
+function exportWidget(){if(!window.AndroidNet||!AndroidNet.saveWidget)return;clearTimeout(wgT);wgT=setTimeout(()=>{try{
+  const out={m:{}};for(let i=-12;i<=24;i++){const d=new Date(today.getFullYear(),today.getMonth()+i,1),y=d.getFullYear(),m=d.getMonth(),n=new Date(y,m+1,0).getDate(),arr=[];
+    for(let dd=1;dd<=n;dd++){const f=info(y,m,dd);arr.push([f.type,f.hours||0,colOf(f.col).c,f.note?1:0])}out.m[y+'-'+pad(m+1)]=arr}
+  AndroidNet.saveWidget(JSON.stringify(out))}catch(e){}},300)}
+$('#wgIco').innerHTML=px(CAL,P.cal,22);
+$('#wgBtn').onclick=()=>{let ok=false;try{ok=AndroidNet.pinWidget()}catch(e){}
+  if(ok){sfx('coin');toast('Подтверди добавление виджета')}else{sfx('err');toast('Долгое нажатие на главном экране → Виджеты → WorkCalendar')}};
+window.__openDate=function(k){try{if(!S.setup||!k)return;
+  ['#dayVeil','#setVeil','#monVeil','#yrVeil','#photoVeil'].forEach(id=>{const e=$(id);if(e)e.hidden=true});
+  const p2=k.split('-').map(Number);view={y:p2[0],m:p2[1]-1};render();if(p2[2])openDay(p2[2]);else sfx('nav')}catch(e){}};
 /* ---------- misc ---------- */
 let tT;function toast(t){const el=$('#toast');el.textContent=t;el.hidden=false;clearTimeout(tT);tT=setTimeout(()=>el.hidden=true,1700)}
 function openMon(){render();paintPhotos();$('#monName').textContent=MONTHS[view.m]+' '+view.y;$('#monVeil').hidden=false;sfx('open')}
@@ -1009,7 +1027,7 @@ $('#helloGo').onclick=()=>{if(H.step===1){if(H.p==='free'){finishHello(null);ret
     $('#helloDate').value=S.setup&&S.pattern===H.p?S.anchor:key(d.getFullYear(),d.getMonth(),d.getDate());sfx('open');paintHello();return}
   const v=$('#helloDate').value;if(!v){sfx('err');toast('Выбери дату');return}finishHello(v)};
 if(!S.setup)showHello();
-if(window.__APK){const sec=$('#acctBtn').closest('.sec');if(sec)sec.hidden=true;fbInit()}else initSync();
+if(window.__APK){$('#wgSec').hidden=!(window.AndroidNet&&AndroidNet.pinWidget);const sec=$('#acctBtn').closest('.sec');if(sec)sec.hidden=true;fbInit()}else initSync();
 window.__back=function(){
   if(!$('#photoVeil').hidden){closePhoto();return true}
   if(!$('#yrVeil').hidden){closeYear();return true}
